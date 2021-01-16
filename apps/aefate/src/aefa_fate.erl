@@ -65,6 +65,7 @@
 -endif.
 
 -include_lib("aebytecode/include/aeb_fate_data.hrl").
+-include_lib("aecontract/include/aecontract.hrl").
 
 -ifdef(TEST).
 -define(trace(I,S), aefa_engine_state:add_trace(I, S)).
@@ -212,6 +213,9 @@ abort({trying_to_call_function, Name}, ES) ->
     ?t("Trying to call undefined function: ~w", [Name], ES);
 abort({trying_to_call_contract, Pubkey}, ES) ->
     ?t("Trying to call invalid contract: ~w", [Pubkey], ES);
+abort({illegal_cross_vm_version_call, VM1, VM2
+      }, ES) ->
+    ?t("Illegal cross VM version call ~p /= ~p", [VM1, VM2], ES);
 abort({not_allowed_in_auth_context, Op}, ES) ->
     ?t("Operation ~p not allowed in GA Authentication context", [Op], ES);
 abort({not_allowed_offchain, Op}, ES) ->
@@ -335,12 +339,19 @@ set_remote_function(Caller, ?FATE_CONTRACT(Pubkey), Function, CheckPayable, Chec
         void ->
             APIState  = aefa_engine_state:chain_api(ES),
             case aefa_chain_api:contract_fate_code(Pubkey, APIState) of
-                {ok, ContractCode, APIState1} ->
-                    CodeCache1 = maps:put(Pubkey, ContractCode, CodeCache),
-                    ES1 = aefa_engine_state:set_code_cache(CodeCache1, ES),
-                    ES2 = aefa_engine_state:set_chain_api(APIState1, ES1),
-                    ES3 = aefa_engine_state:update_for_remote_call(Pubkey, ContractCode, Caller, ES2),
-                    check_flags_and_set_local_function(CheckPayable, CheckPrivate, Function, ES3);
+                {ok, ContractCode, ContractVMVersion, APIState1} ->
+                    %% NOTE: Since VMVersions are checked for equality, no need to update (and pop)
+                    %% VMVersion in engine state.
+                    case is_legal_call(aefa_engine_state:vm_version(ES), ContractVMVersion) of
+                        true ->
+                            CodeCache1 = maps:put(Pubkey, ContractCode, CodeCache),
+                            ES1 = aefa_engine_state:set_code_cache(CodeCache1, ES),
+                            ES2 = aefa_engine_state:set_chain_api(APIState1, ES1),
+                            ES3 = aefa_engine_state:update_for_remote_call(Pubkey, ContractCode, Caller, ES2),
+                            check_flags_and_set_local_function(CheckPayable, CheckPrivate, Function, ES3);
+                        false ->
+                            abort({illegal_cross_vm_version_call, aefa_engine_state:vm_version(ES), ContractVMVersion}, ES)
+                    end;
                 error ->
                     abort({trying_to_call_contract, Pubkey}, ES)
             end;
@@ -348,6 +359,10 @@ set_remote_function(Caller, ?FATE_CONTRACT(Pubkey), Function, CheckPayable, Chec
             ES1 = aefa_engine_state:update_for_remote_call(Pubkey, ContractCode, Caller, ES),
             check_flags_and_set_local_function(CheckPayable, CheckPrivate, Function, ES1)
     end.
+
+is_legal_call(VM1, VM2) ->
+    aect_contracts:is_legal_call(#{vm => VM1, abi => ?ABI_FATE_SOPHIA_1},
+                                 #{vm => VM2, abi => ?ABI_FATE_SOPHIA_1}).
 
 check_flags_and_set_local_function(false, false, Function, ES) ->
     set_local_function(Function, ES);

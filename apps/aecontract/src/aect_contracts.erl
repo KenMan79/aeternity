@@ -120,7 +120,7 @@ is_legal_call(#{vm := SophiaVM1, abi := X},
 is_legal_call(#{vm := SophiaVM1, abi := X},
               #{vm := SophiaVM2, abi := X}) when ?IS_FATE_SOPHIA(SophiaVM1),
                                                  ?IS_FATE_SOPHIA(SophiaVM2),
-                                                 SophiaVM1 >= SophiaVM2 ->
+                                                 SophiaVM1 == SophiaVM2 ->
     true;
 is_legal_call(_, _) -> false.
 

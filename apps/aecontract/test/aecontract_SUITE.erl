@@ -2139,22 +2139,15 @@ sophia_fate_interaction(Cfg) ->
               , IdCIris
               ]],
 
-    %% Call oldVM -> oldVM and newVM -> oldVM
+    %% Call oldVM -> oldVM
     [?assertEqual(98, ?call(call_contract, Acc, Rem, call, word, {?cid(Id), 98}, LatestCallSpec))
-     || {Rem, Id} <- [ {RemCLima,    IdCLima}
-                     , {RemCIris,    IdCLima}
-                     , {RemCLima,    IdCIris}
+     || {Rem, Id} <- [ {RemCLima, IdCLima}
                      ]],
-
-    %% Call newVM -> oldVM -> oldVM
-    [?assertEqual(77, ?call(call_contract, Acc, Rem1, staged_call, word,
-                            {?cid(Id), ?cid(Rem2), 77}, LatestCallSpec))
-     || {Rem1, Id, Rem2} <- [ {RemCIris, IdCLima, RemCLima}
-                            ]],
 
     %% Fail calling oldVM -> newVM
     [?assertMatch({error, _}, ?call(call_contract, Acc, Rem, call, word, {?cid(Id), 98}, LatestCallSpec))
      || {Rem, Id} <- [ {RemCLima, IdCIris}
+                     , {RemCIris, IdCLima}
                      ]],
     ok.
 
